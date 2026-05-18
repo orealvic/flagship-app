@@ -1,0 +1,105 @@
+name: Deploy Web to Azure App Service
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - '.github/workflows/deploy-web.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AZURE_CLIENT_ID: 10dfbb9c-479a-4ce7-a712-ba2a13b46b8d
+  AZURE_TENANT_ID: 7ec212c0-da91-40f6-b6a6-54e115420517
+  AZURE_SUBSCRIPTION_ID: 581d2bc0-046e-4a3b-b753-ed9977729366
+  APP_NAME_PROD: app-flagship-procurement-web-prod-7z1bw1
+  API_BASE_URL_PROD: https://app-flagship-procurement-api-prod-7z1bw1.azurewebsites.net
+  NODE_VERSION: '20.x'
+
+jobs:
+  build-and-deploy:
+    name: Build and deploy to prod
+    runs-on: ubuntu-latest
+    environment:
+      name: app-prod
+      url: https://${{ env.APP_NAME_PROD }}.azurewebsites.net
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Build production bundle
+        working-directory: web
+        env:
+          VITE_API_BASE_URL: ${{ env.API_BASE_URL_PROD }}
+        run: npm run build
+
+      - name: Stage deployment package
+        run: |
+          mkdir -p deploy-package
+          cp -r web/dist/* deploy-package/
+          cp web/package.json deploy-package/
+          cd deploy-package
+          # Create a tiny static server so App Service has something to run
+          cat > server.js << 'EOF'
+          const express = require("express");
+          const path = require("path");
+          const app = express();
+          const PORT = process.env.PORT || 8080;
+          app.use(express.static(__dirname));
+          app.get("*", (_, res) => res.sendFile(path.join(__dirname, "index.html")));
+          app.listen(PORT, () => console.log("Static server on :" + PORT));
+          EOF
+          cat > package.json << 'EOF'
+          {
+            "name": "flagship-procurement-web-deploy",
+            "version": "0.1.0",
+            "scripts": { "start": "node server.js" },
+            "dependencies": { "express": "^4.21.1" }
+          }
+          EOF
+          npm install --omit=dev
+          ls -la
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.APP_NAME_PROD }}
+          package: deploy-package
+
+      - name: Smoke test homepage
+        run: |
+          echo "Waiting 30s for App Service to warm up..."
+          sleep 30
+          for i in 1 2 3 4 5; do
+            STATUS=$(curl -sS -o /dev/null -w "%{http_code}" "https://${{ env.APP_NAME_PROD }}.azurewebsites.net/")
+            echo "Attempt $i: HTTP $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              echo "Homepage responding"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "Homepage check failed after 5 attempts"
+          exit 1

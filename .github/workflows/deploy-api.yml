@@ -1,0 +1,81 @@
+name: Deploy API to Azure App Service
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'api/**'
+      - '.github/workflows/deploy-api.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AZURE_CLIENT_ID: 10dfbb9c-479a-4ce7-a712-ba2a13b46b8d
+  AZURE_TENANT_ID: 7ec212c0-da91-40f6-b6a6-54e115420517
+  AZURE_SUBSCRIPTION_ID: 581d2bc0-046e-4a3b-b753-ed9977729366
+  APP_NAME_PROD: app-flagship-procurement-api-prod-7z1bw1
+  NODE_VERSION: '20.x'
+
+jobs:
+  build-and-deploy:
+    name: Build and deploy to prod
+    runs-on: ubuntu-latest
+    environment:
+      name: app-prod
+      url: https://${{ env.APP_NAME_PROD }}.azurewebsites.net
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+
+      - name: Install production dependencies
+        working-directory: api
+        run: npm ci --omit=dev
+
+      - name: Show package contents
+        working-directory: api
+        run: |
+          echo "Files to deploy:"
+          ls -la
+          echo "Node modules count:"
+          ls node_modules | wc -l
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.APP_NAME_PROD }}
+          package: api
+
+      - name: Smoke test health endpoint
+        run: |
+          echo "Waiting 30s for App Service to warm up..."
+          sleep 30
+          for i in 1 2 3 4 5; do
+            STATUS=$(curl -sS -o /tmp/resp.txt -w "%{http_code}" "https://${{ env.APP_NAME_PROD }}.azurewebsites.net/api/health" || echo "000")
+            echo "Attempt $i: HTTP $STATUS"
+            cat /tmp/resp.txt
+            echo ""
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "Health check failed after 5 attempts"
+          exit 1
