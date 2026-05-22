@@ -1,0 +1,13 @@
+﻿{
+  "name": "flagship-ai-review",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "review": "node ai-review.js"
+  },
+  "dependencies": {
+    "openai": "^4.71.0",
+    "@octokit/rest": "^21.0.2"
+  }
+}

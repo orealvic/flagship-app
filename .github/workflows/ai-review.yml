@@ -1,0 +1,99 @@
+name: AI PR Review
+
+on:
+  pull_request:
+    types: [labeled, synchronize]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to review manually'
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  review:
+    # Only run when 'ai-review' label is present, OR on manual dispatch
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       (
+         (github.event.action == 'labeled' && github.event.label.name == 'ai-review') ||
+         (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'ai-review'))
+       ))
+    runs-on: ubuntu-latest
+    environment: app-prod
+
+    env:
+      AZURE_CLIENT_ID: 10dfbb9c-479a-4ce7-a712-ba2a13b46b8d
+      AZURE_TENANT_ID: 7ec212c0-da91-40f6-b6a6-54e115420517
+      AZURE_SUBSCRIPTION_ID: 581d2bc0-046e-4a3b-b753-ed9977729366
+      KV_NAME: kv-flag-prod-7z1bw1
+      OPENAI_ENDPOINT: https://aoai-flagship-prod-7z1bw1.openai.azure.com/
+
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Determine SHAs
+        id: shas
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            PR_NUM="${{ github.event.inputs.pr_number }}"
+            PR_JSON=$(gh pr view "$PR_NUM" --json baseRefOid,headRefOid)
+            BASE_SHA=$(echo "$PR_JSON" | jq -r '.baseRefOid')
+            HEAD_SHA=$(echo "$PR_JSON" | jq -r '.headRefOid')
+          else
+            PR_NUM="${{ github.event.pull_request.number }}"
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          fi
+          echo "pr_number=$PR_NUM" >> $GITHUB_OUTPUT
+          echo "base_sha=$BASE_SHA" >> $GITHUB_OUTPUT
+          echo "head_sha=$HEAD_SHA" >> $GITHUB_OUTPUT
+          echo "Reviewing PR #$PR_NUM ($BASE_SHA -> $HEAD_SHA)"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Login to Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Fetch OpenAI API key from Key Vault
+        id: kv
+        run: |
+          OPENAI_KEY=$(az keyvault secret show --vault-name "$KV_NAME" --name "openai-api-key" --query "value" -o tsv)
+          echo "::add-mask::$OPENAI_KEY"
+          echo "openai_key=$OPENAI_KEY" >> $GITHUB_OUTPUT
+
+      - name: Install review script dependencies
+        working-directory: scripts
+        run: npm ci
+
+      - name: Run AI review
+        working-directory: scripts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.shas.outputs.pr_number }}
+          BASE_SHA: ${{ steps.shas.outputs.base_sha }}
+          HEAD_SHA: ${{ steps.shas.outputs.head_sha }}
+          OPENAI_ENDPOINT: ${{ env.OPENAI_ENDPOINT }}
+          OPENAI_API_KEY: ${{ steps.kv.outputs.openai_key }}
+        run: node ai-review.js
