@@ -3,17 +3,21 @@
   "version": "0.1.0",
   "description": "Procurement-lite API for the Flagship landing zone demo",
   "main": "server.js",
-  "engines": { "node": ">=20.0.0" },
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
     "migrate": "node migrations/run-migrations.js"
   },
   "dependencies": {
-    "express": "^4.21.1",
-    "mysql2": "^3.11.4",
+    "@azure/cosmos": "^4.9.3",
     "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
     "morgan": "^1.10.0",
-    "dotenv": "^16.4.5"
+    "mysql2": "^3.11.4",
+    "openai": "^6.38.0"
   }
 }
