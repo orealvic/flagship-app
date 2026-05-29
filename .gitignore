@@ -19,3 +19,7 @@ Thumbs.db
 .terraform/
 local.settings.json
 appsettings.local.json
+
+# Build artifacts
+api-deploy.zip
+*.zip

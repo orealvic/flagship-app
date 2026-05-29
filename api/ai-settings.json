@@ -1,0 +1,22 @@
+[
+  {
+    "name": "OPENAI_ENDPOINT",
+    "value": "https://aoai-flagship-prod-7z1bw1.openai.azure.com/",
+    "slotSetting": false
+  },
+  {
+    "name": "COSMOS_ENDPOINT",
+    "value": "https://cosmos-flagship-prod-7z1bw1.documents.azure.com:443/",
+    "slotSetting": false
+  },
+  {
+    "name": "OPENAI_API_KEY",
+    "value": "@Microsoft.KeyVault(SecretUri=https://kv-flag-prod-7z1bw1.vault.azure.net/secrets/openai-api-key/)",
+    "slotSetting": false
+  },
+  {
+    "name": "COSMOS_KEY",
+    "value": "@Microsoft.KeyVault(SecretUri=https://kv-flag-prod-7z1bw1.vault.azure.net/secrets/cosmos-key/)",
+    "slotSetting": false
+  }
+]

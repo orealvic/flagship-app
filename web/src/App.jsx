@@ -1,9 +1,10 @@
-import { Routes, Route, Link, useLocation } from "react-router-dom";
+﻿import { Routes, Route, Link, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import Vendors from "./pages/Vendors";
 import Requisitions from "./pages/Requisitions";
 import NewRequisition from "./pages/NewRequisition";
+import Chat from "./pages/Chat";
 
 function Layout({ children }) {
   const [health, setHealth] = useState(null);
@@ -24,6 +25,7 @@ function Layout({ children }) {
               {nav("/", "Requisitions")}
               {nav("/vendors", "Vendors")}
               {nav("/new", "New Requisition")}
+              {nav("/chat", "AI Assistant")}
             </div>
           </div>
           <div className="text-xs">
@@ -49,6 +51,7 @@ export default function App() {
         <Route path="/" element={<Requisitions />} />
         <Route path="/vendors" element={<Vendors />} />
         <Route path="/new" element={<NewRequisition />} />
+        <Route path="/chat" element={<Chat />} />
       </Routes>
     </Layout>
   );
